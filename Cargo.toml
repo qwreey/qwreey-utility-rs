@@ -10,4 +10,4 @@ license = "MIT"
 [dependencies]
 
 [lib]
-path = "lib.rs"
+path = "src/lib.rs"
