@@ -1,7 +1,11 @@
 [package]
-name = "qutility-rs"
+name = "qwreey-utility-rs"
 version = "0.1.0"
 edition = "2021"
+authors = ["Qwreey <me@qwreey.moe>"]
+description = "Qwreey's shared rust codes"
+repository = "https://github.com/qwreey/qwreey-utility-rs"
+license = "MIT"
 
 [dependencies]
 
