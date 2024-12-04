@@ -114,6 +114,7 @@ pub struct ElementReadHandle<'a, T> {
     _table_lock: RwLockReadGuard<'a, ()>,
     _p: PhantomData<T>,
 }
+unsafe impl<'a, T> Send for ElementReadHandle<'a, T> {}
 impl<'a, T: 'static> Deref for ElementReadHandle<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
@@ -138,6 +139,7 @@ pub struct ElementWriteHandle<'a, T> {
     _table_lock: RwLockReadGuard<'a, ()>,
     _p: PhantomData<T>,
 }
+unsafe impl<'a, T> Send for ElementWriteHandle<'a, T> {}
 impl<'a, T: 'static> Deref for ElementWriteHandle<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {

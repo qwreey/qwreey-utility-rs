@@ -1,7 +1,7 @@
-mod err_tostring;
+mod errutil;
 mod hashmap;
 
-pub use err_tostring::ErrToString;
+pub use errutil::{ErrToString, HeadingError};
 pub use hashmap::{
     ArcRwUserdata, ElementReadHandle, ElementWriteHandle, RwAnyHashMap, RwTypedHashMap, RwUserdata,
 };
