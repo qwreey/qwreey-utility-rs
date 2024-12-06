@@ -182,3 +182,17 @@ impl ArcRwUserdata {
         Self(Arc::new(RwUserdata::new()))
     }
 }
+
+#[macro_export]
+macro_rules! write_map {
+    ($map:expr, { $($key:expr => $val:expr),* $(,)? }) => {
+        {
+            #[allow(non_snake_case)]
+            let mut WRITE_MAP_HANDLE = $map;
+            
+            $(WRITE_MAP_HANDLE.insert($key, $val);)*;
+            
+            WRITE_MAP_HANDLE
+        }
+    };
+}
