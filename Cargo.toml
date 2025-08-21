@@ -1,6 +1,6 @@
 [package]
 name = "qwreey-utility-rs"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 authors = ["Qwreey <me@qwreey.moe>"]
 description = "Qwreey's shared rust codes"

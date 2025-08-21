@@ -72,6 +72,7 @@ pub struct RwMap {
     named: RwNamedMap<String>,
     typed: RwTypedMap,
 }
+unsafe impl Send for RwMap {}
 impl RwMap {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
