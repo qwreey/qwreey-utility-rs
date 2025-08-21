@@ -8,20 +8,21 @@ use std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
-pub struct RwAnyHashMap<Key: Hash + Eq> {
+pub struct RwNamedMap<Key: Hash + Eq> {
     table: UnsafeCell<HashMap<Key, Box<RwLock<dyn Any + Send + Sync>>>>,
     table_rw: RwLock<()>,
 }
-unsafe impl<T: Hash + Eq> Send for RwAnyHashMap<T> {}
-unsafe impl<T: Hash + Eq> Sync for RwAnyHashMap<T> {}
-impl<Key: Hash + Eq> RwAnyHashMap<Key> {
+unsafe impl<T: Hash + Eq> Send for RwNamedMap<T> {}
+unsafe impl<T: Hash + Eq> Sync for RwNamedMap<T> {}
+impl<Key: Hash + Eq> RwNamedMap<Key> {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
             table: UnsafeCell::new(HashMap::new()),
             table_rw: RwLock::new(()),
         }
     }
-    pub fn get<T: Any + Send + Sync>(&self, key: &Key) -> Option<ElementReadHandle<T>> {
+    pub fn get<T: Any + Send + Sync>(&'_ self, key: &Key) -> Option<ElementReadHandle<'_, T>> {
         Some(ElementReadHandle::<T>::new(
             self.table_rw.read().ok()?,
             unsafe { self.table.get().as_ref().unwrap() }
@@ -30,10 +31,10 @@ impl<Key: Hash + Eq> RwAnyHashMap<Key> {
                 .ok()?,
         ))
     }
-    pub fn get_mut<T: Any + Send + Sync>(&self, key: &Key) -> Option<ElementWriteHandle<T>> {
+    pub fn get_mut<T: Any + Send + Sync>(&'_ self, key: &Key) -> Option<ElementWriteHandle<'_, T>> {
         Some(ElementWriteHandle::<T>::new(
-                self.table_rw.read().ok()?,
-                unsafe { self.table.get().as_ref().unwrap() }
+            self.table_rw.read().ok()?,
+            unsafe { self.table.get().as_ref().unwrap() }
                 .get(key)?
                 .write()
                 .ok()?,
@@ -47,17 +48,18 @@ impl<Key: Hash + Eq> RwAnyHashMap<Key> {
     }
 }
 
-pub struct RwTypedHashMap(RwAnyHashMap<TypeId>);
-impl RwTypedHashMap {
+pub struct RwTypedMap(RwNamedMap<TypeId>);
+impl RwTypedMap {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        Self(RwAnyHashMap::new())
+        Self(RwNamedMap::new())
     }
     #[inline]
-    pub fn get_of<T: 'static + Send + Sync>(&self) -> Option<ElementReadHandle<T>> {
+    pub fn get_of<T: 'static + Send + Sync>(&'_ self) -> Option<ElementReadHandle<'_, T>> {
         self.0.get(&TypeId::of::<T>())
     }
     #[inline]
-    pub fn get_of_mut<T: 'static + Send + Sync>(&self) -> Option<ElementWriteHandle<T>> {
+    pub fn get_of_mut<T: 'static + Send + Sync>(&'_ self) -> Option<ElementWriteHandle<'_, T>> {
         self.0.get_mut(&TypeId::of::<T>())
     }
     #[inline]
@@ -66,23 +68,24 @@ impl RwTypedHashMap {
     }
 }
 
-pub struct RwUserdata {
-    named: RwAnyHashMap<String>,
-    typed: RwTypedHashMap,
+pub struct RwMap {
+    named: RwNamedMap<String>,
+    typed: RwTypedMap,
 }
-impl RwUserdata {
+impl RwMap {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
-            named: RwAnyHashMap::<String>::new(),
-            typed: RwTypedHashMap::new(),
+            named: RwNamedMap::<String>::new(),
+            typed: RwTypedMap::new(),
         }
     }
     #[inline]
-    pub fn get_of<T: 'static + Send + Sync>(&self) -> Option<ElementReadHandle<T>> {
+    pub fn get_of<T: 'static + Send + Sync>(&'_ self) -> Option<ElementReadHandle<'_, T>> {
         self.typed.get_of::<T>()
     }
     #[inline]
-    pub fn get_of_mut<T: 'static + Send + Sync>(&self) -> Option<ElementWriteHandle<T>> {
+    pub fn get_of_mut<T: 'static + Send + Sync>(&'_ self) -> Option<ElementWriteHandle<'_, T>> {
         self.typed.get_of_mut::<T>()
     }
     #[inline]
@@ -91,16 +94,16 @@ impl RwUserdata {
     }
     #[inline]
     pub fn get<T: 'static + Send + Sync>(
-        &self,
+        &'_ self,
         key: impl Into<String>,
-    ) -> Option<ElementReadHandle<T>> {
+    ) -> Option<ElementReadHandle<'_, T>> {
         self.named.get::<T>(&key.into())
     }
     #[inline]
     pub fn get_mut<T: 'static + Send + Sync>(
-        &self,
+        &'_ self,
         key: impl Into<String>,
-    ) -> Option<ElementWriteHandle<T>> {
+    ) -> Option<ElementWriteHandle<'_, T>> {
         self.named.get_mut::<T>(&key.into())
     }
     #[inline]
@@ -165,21 +168,22 @@ impl<'a, T> ElementWriteHandle<'a, T> {
 }
 
 #[derive(Clone)]
-pub struct ArcRwUserdata(Arc<RwUserdata>);
-impl Deref for ArcRwUserdata {
-    type Target = RwUserdata;
+pub struct ArcRwMap(Arc<RwMap>);
+impl Deref for ArcRwMap {
+    type Target = RwMap;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-impl DerefMut for ArcRwUserdata {
+impl DerefMut for ArcRwMap {
     fn deref_mut(&mut self) -> &mut Self::Target {
         Arc::get_mut(&mut self.0).unwrap()
     }
 }
-impl ArcRwUserdata {
+impl ArcRwMap {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        Self(Arc::new(RwUserdata::new()))
+        Self(Arc::new(RwMap::new()))
     }
 }
 
@@ -189,9 +193,9 @@ macro_rules! write_map {
         {
             #[allow(non_snake_case)]
             let mut WRITE_MAP_HANDLE = $map;
-            
+
             $(WRITE_MAP_HANDLE.insert($key, $val);)*;
-            
+
             WRITE_MAP_HANDLE
         }
     };
