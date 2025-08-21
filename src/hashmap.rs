@@ -169,6 +169,7 @@ impl<'a, T> ElementWriteHandle<'a, T> {
 
 #[derive(Clone)]
 pub struct ArcRwMap(Arc<RwMap>);
+unsafe impl Send for ArcRwMap {}
 impl Deref for ArcRwMap {
     type Target = RwMap;
     fn deref(&self) -> &Self::Target {
