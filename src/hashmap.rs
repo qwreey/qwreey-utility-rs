@@ -8,13 +8,13 @@ use std::{
     sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
-pub struct RwNamedMap<Key: Hash + Eq> {
-    table: UnsafeCell<HashMap<Key, Box<RwLock<dyn Any + Send + Sync>>>>,
+pub struct RwHashMap<Key: Hash + Eq> {
+    table: UnsafeCell<HashMap<Key, Box<RwLock<dyn Any + Send>>>>,
     table_rw: RwLock<()>,
 }
-unsafe impl<T: Hash + Eq> Send for RwNamedMap<T> {}
-unsafe impl<T: Hash + Eq> Sync for RwNamedMap<T> {}
-impl<Key: Hash + Eq> RwNamedMap<Key> {
+unsafe impl<T: Hash + Eq> Send for RwHashMap<T> {}
+unsafe impl<T: Hash + Eq> Sync for RwHashMap<T> {}
+impl<Key: Hash + Eq> RwHashMap<Key> {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
@@ -22,8 +22,8 @@ impl<Key: Hash + Eq> RwNamedMap<Key> {
             table_rw: RwLock::new(()),
         }
     }
-    pub fn get<T: Any + Send + Sync>(&'_ self, key: &Key) -> Option<ElementReadHandle<'_, T>> {
-        Some(ElementReadHandle::<T>::new(
+    pub fn get<T: 'static + Any + Send>(&'_ self, key: &Key) -> Option<MapReader<'_, T>> {
+        Some(MapReader::<T>::new(
             self.table_rw.read().ok()?,
             unsafe { self.table.get().as_ref().unwrap() }
                 .get(key)?
@@ -31,8 +31,8 @@ impl<Key: Hash + Eq> RwNamedMap<Key> {
                 .ok()?,
         ))
     }
-    pub fn get_mut<T: Any + Send + Sync>(&'_ self, key: &Key) -> Option<ElementWriteHandle<'_, T>> {
-        Some(ElementWriteHandle::<T>::new(
+    pub fn get_mut<T: 'static + Any + Send>(&'_ self, key: &Key) -> Option<MapWriter<'_, T>> {
+        Some(MapWriter::<T>::new(
             self.table_rw.read().ok()?,
             unsafe { self.table.get().as_ref().unwrap() }
                 .get(key)?
@@ -40,7 +40,7 @@ impl<Key: Hash + Eq> RwNamedMap<Key> {
                 .ok()?,
         ))
     }
-    pub fn insert<T: Any + Send + Sync>(&self, key: Key, value: T) -> Option<()> {
+    pub fn insert<T: 'static + Any + Send>(&self, key: Key, value: T) -> Option<()> {
         let lock = self.table_rw.write().ok()?;
         unsafe { self.table.get().as_mut().unwrap() }.insert(key, Box::new(RwLock::new(value)));
         drop(lock);
@@ -48,45 +48,48 @@ impl<Key: Hash + Eq> RwNamedMap<Key> {
     }
 }
 
-pub struct RwTypedMap(RwNamedMap<TypeId>);
+pub struct RwTypedMap(RwHashMap<TypeId>);
+unsafe impl Send for RwTypedMap {}
+unsafe impl Sync for RwTypedMap {}
 impl RwTypedMap {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        Self(RwNamedMap::new())
+        Self(RwHashMap::new())
     }
     #[inline]
-    pub fn get_of<T: 'static + Send + Sync>(&'_ self) -> Option<ElementReadHandle<'_, T>> {
+    pub fn get_of<T: 'static + Send>(&'_ self) -> Option<MapReader<'_, T>> {
         self.0.get(&TypeId::of::<T>())
     }
     #[inline]
-    pub fn get_of_mut<T: 'static + Send + Sync>(&'_ self) -> Option<ElementWriteHandle<'_, T>> {
+    pub fn get_of_mut<T: 'static + Send>(&'_ self) -> Option<MapWriter<'_, T>> {
         self.0.get_mut(&TypeId::of::<T>())
     }
     #[inline]
-    pub fn insert_of<T: 'static + Send + Sync>(&self, value: T) {
+    pub fn insert_of<T: 'static + Send>(&self, value: T) {
         self.0.insert(TypeId::of::<T>(), value);
     }
 }
 
 pub struct RwMap {
-    named: RwNamedMap<String>,
+    named: RwHashMap<String>,
     typed: RwTypedMap,
 }
 unsafe impl Send for RwMap {}
+unsafe impl Sync for RwMap {}
 impl RwMap {
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         Self {
-            named: RwNamedMap::<String>::new(),
+            named: RwHashMap::<String>::new(),
             typed: RwTypedMap::new(),
         }
     }
     #[inline]
-    pub fn get_of<T: 'static + Send + Sync>(&'_ self) -> Option<ElementReadHandle<'_, T>> {
+    pub fn get_of<T: 'static + Send + Sync>(&'_ self) -> Option<MapReader<'_, T>> {
         self.typed.get_of::<T>()
     }
     #[inline]
-    pub fn get_of_mut<T: 'static + Send + Sync>(&'_ self) -> Option<ElementWriteHandle<'_, T>> {
+    pub fn get_of_mut<T: 'static + Send + Sync>(&'_ self) -> Option<MapWriter<'_, T>> {
         self.typed.get_of_mut::<T>()
     }
     #[inline]
@@ -97,14 +100,14 @@ impl RwMap {
     pub fn get<T: 'static + Send + Sync>(
         &'_ self,
         key: impl Into<String>,
-    ) -> Option<ElementReadHandle<'_, T>> {
+    ) -> Option<MapReader<'_, T>> {
         self.named.get::<T>(&key.into())
     }
     #[inline]
     pub fn get_mut<T: 'static + Send + Sync>(
         &'_ self,
         key: impl Into<String>,
-    ) -> Option<ElementWriteHandle<'_, T>> {
+    ) -> Option<MapWriter<'_, T>> {
         self.named.get_mut::<T>(&key.into())
     }
     #[inline]
@@ -113,23 +116,20 @@ impl RwMap {
     }
 }
 
-pub struct ElementReadHandle<'a, T> {
-    data: RwLockReadGuard<'a, dyn Any + Send + Sync>,
+pub struct MapReader<'a, T> {
+    data: RwLockReadGuard<'a, dyn Any + Send>,
     _table_lock: RwLockReadGuard<'a, ()>,
     _p: PhantomData<T>,
 }
-unsafe impl<'a, T> Send for ElementReadHandle<'a, T> {}
-impl<'a, T: 'static> Deref for ElementReadHandle<'a, T> {
+unsafe impl<'a, T> Send for MapReader<'a, T> {}
+impl<'a, T: 'static> Deref for MapReader<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.data.downcast_ref::<T>().unwrap()
     }
 }
-impl<'a, T> ElementReadHandle<'a, T> {
-    fn new(
-        table_lock: RwLockReadGuard<'a, ()>,
-        data: RwLockReadGuard<'a, dyn Any + Send + Sync>,
-    ) -> Self {
+impl<'a, T> MapReader<'a, T> {
+    fn new(table_lock: RwLockReadGuard<'a, ()>, data: RwLockReadGuard<'a, dyn Any + Send>) -> Self {
         Self {
             data,
             _table_lock: table_lock,
@@ -138,27 +138,27 @@ impl<'a, T> ElementReadHandle<'a, T> {
     }
 }
 
-pub struct ElementWriteHandle<'a, T> {
-    data: RwLockWriteGuard<'a, dyn Any + Send + Sync>,
+pub struct MapWriter<'a, T> {
+    data: RwLockWriteGuard<'a, dyn Any + Send>,
     _table_lock: RwLockReadGuard<'a, ()>,
     _p: PhantomData<T>,
 }
-unsafe impl<'a, T> Send for ElementWriteHandle<'a, T> {}
-impl<'a, T: 'static> Deref for ElementWriteHandle<'a, T> {
+unsafe impl<'a, T> Send for MapWriter<'a, T> {}
+impl<'a, T: 'static> Deref for MapWriter<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
         self.data.downcast_ref().unwrap()
     }
 }
-impl<'a, T: 'static> DerefMut for ElementWriteHandle<'a, T> {
+impl<'a, T: 'static> DerefMut for MapWriter<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.data.downcast_mut::<T>().unwrap()
     }
 }
-impl<'a, T> ElementWriteHandle<'a, T> {
+impl<'a, T> MapWriter<'a, T> {
     fn new(
         table_lock: RwLockReadGuard<'a, ()>,
-        data: RwLockWriteGuard<'a, dyn Any + Send + Sync>,
+        data: RwLockWriteGuard<'a, dyn Any + Send>,
     ) -> Self {
         Self {
             data,
