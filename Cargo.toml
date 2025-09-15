@@ -1,6 +1,6 @@
 [package]
 name = "qwreey-utility-rs"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 authors = ["Qwreey <me@qwreey.moe>"]
 description = "Qwreey's shared rust codes"
@@ -8,10 +8,9 @@ repository = "https://github.com/qwreey/qwreey-utility-rs"
 license = "MIT"
 
 [dependencies]
-mlua = { version = "0.11.2", optional = true }
+mlua = { version = "0.11.3", optional = true }
 
 [features]
-default = [ "mlua-luau" ]
 mlua-luau = [ "dep:mlua", "mlua/luau", "mlua/async" ]
 mlua-send = [ "mlua/send" ]
 
